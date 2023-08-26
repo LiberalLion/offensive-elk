@@ -23,11 +23,11 @@ class Watcher:
     def __init__(self):
         self.observer = Observer()
         if not os.path.exists(DIR_TO_WATCH):
-            raise('Watch directory does not exist: %s' % DIR_TO_WATCH)
+            raise f'Watch directory does not exist: {DIR_TO_WATCH}'
 
         if not os.path.exists(DIR_FOR_ERRORS):
             os.makedirs(DIR_FOR_ERRORS)
-        
+
         if not os.path.exists(DIR_FOR_PROCESSED):
             os.makedirs(DIR_FOR_PROCESSED)
 
