@@ -43,7 +43,7 @@ class NmapES:
 
     def refreshNmapIndex(self):
         #make sure this only runs every 5 minutes
-        if ((self.last_index_update - datetime.now()).total_seconds() / 60.0 < 5):
+        if (self.last_index_update - datetime.now()).total_seconds() < 300:
             return
 
         self.es.indices.delete(index="nmap-vuln-to-es")
@@ -54,15 +54,11 @@ class NmapES:
         "Returns a list of dictionaries (only for open ports) for each host in the report"
         for h in self.root.iter('host'):
 
-            dict_item = {}
-            dict_item['scanner'] = 'nmap'
-            dict_item['tags'] = self.tags
-            dict_item['app'] = self.app
-            
+            dict_item = {'scanner': 'nmap', 'tags': self.tags, 'app': self.app}
             if h.tag == 'host':
                 if 'endtime' in h.attrib and h.attrib['endtime']:
                     dict_item['time'] = time.strftime('%Y/%m/%d %H:%M:%S', time.gmtime(float(h.attrib['endtime'])))
-            
+
             for c in h:
                 if c.tag == 'address':
                     if c.attrib['addr']:
@@ -75,14 +71,19 @@ class NmapES:
 
                 elif c.tag == 'ports':
                     for port in c.getchildren():
-                        dict_item_ports = {}
                         if port.tag == 'port':
-                            # print(port.tag, port.attrib)
-                            dict_item_ports['port'] = port.attrib['portid']
-                            dict_item_ports['protocol'] = port.attrib['protocol']
+                            dict_item_ports = {
+                                'port': port.attrib['portid'],
+                                'protocol': port.attrib['protocol'],
+                            }
                             for p in port.getchildren():
-                                if p.tag == 'state':
-                                    dict_item_ports['state'] = p.attrib['state']
+                                if p.tag == 'script':
+                                    if p.attrib['id']:
+                                        if p.attrib['output']:
+                                            # dict_item_ports[p.attrib['id']] = p.attrib['output']
+                                            if 'scripts' not in dict_item_ports:
+                                                dict_item_ports['scripts'] = {}
+                                            dict_item_ports['scripts'][p.attrib['id']] = p.attrib['output']
                                 elif p.tag == 'service':
                                     dict_item_ports['service'] = p.attrib['name']
                                     if 'product' in p.attrib and p.attrib['product']:
@@ -91,17 +92,9 @@ class NmapES:
                                             dict_item_ports['product_version'] = p.attrib['version']
                                     if 'banner' in p.attrib and p.attrib['banner']:
                                         dict_item_ports['banner'] = p.attrib['banner']
-                                elif p.tag == 'script':
-                                    if p.attrib['id']:
-                                        if p.attrib['output']:
-                                            # dict_item_ports[p.attrib['id']] = p.attrib['output']
-                                            if 'scripts' in dict_item_ports:
-                                                dict_item_ports['scripts'][p.attrib['id']] = p.attrib['output']
-                                            else:
-                                                dict_item_ports['scripts'] = dict()
-                                                dict_item_ports['scripts'][p.attrib['id']] = p.attrib['output']
-                                                    
-                            to_upload = merge_two_dicts(dict_item, dict_item_ports)    
+                                elif p.tag == 'state':
+                                    dict_item_ports['state'] = p.attrib['state']
+                            to_upload = merge_two_dicts(dict_item, dict_item_ports)
                             if to_upload['state'] == 'open':
                                 if to_upload.get('service', None) != 'tcpwrapped':
                                     self.es.index(index=self.index_name,doc_type="vuln", body=json.dumps(to_upload))
